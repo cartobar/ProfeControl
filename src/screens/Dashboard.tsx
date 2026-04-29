@@ -13,10 +13,24 @@ type DashboardProps = {
   maestro: Maestro;
   darkMode: boolean;
   onToggleDarkMode: () => void;
-  onIrAGrados: () => void;
+  onNavigate: (actionKey: DashboardActionKey) => void;
 };
 
-const cards = [
+type DashboardActionKey =
+  | 'grados'
+  | 'alumnos'
+  | 'tareas'
+  | 'calificaciones'
+  | 'exportar';
+
+const cards: Array<{
+  title: string;
+  desc: string;
+  icon: typeof GraduationCap;
+  iconWrapperClassName: string;
+  iconClassName: string;
+  actionKey: DashboardActionKey;
+}> = [
   {
     title: 'Gestionar Grados',
     desc: 'Nursery hasta 6° Primaria',
@@ -63,7 +77,7 @@ export default function Dashboard({
   maestro,
   darkMode,
   onToggleDarkMode,
-  onIrAGrados,
+  onNavigate,
 }: DashboardProps) {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -85,7 +99,7 @@ export default function Dashboard({
               icon={item.icon}
               iconWrapperClassName={item.iconWrapperClassName}
               iconClassName={item.iconClassName}
-              onClick={item.actionKey === 'grados' ? onIrAGrados : undefined}
+              onClick={() => onNavigate(item.actionKey)}
             />
           ))}
         </div>

@@ -1,4 +1,10 @@
-import type { Maestro } from '../lib/types';
+import { useEffect, useMemo, useState } from 'react';
+import type { Grado, Maestro } from '../lib/types';
+import {
+  getAlumnosCountByGrado,
+  getGradosOrdenados,
+  seedGradosIfEmpty,
+} from '../lib/db';
 import AppHeader from '../components/layout/AppHeader';
 import GradosStats from '../components/grados/GradosStats';
 import GradoCard from '../components/grados/GradoCard';
@@ -8,30 +14,66 @@ type GradosScreenProps = {
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onVolver: () => void;
+  onIrAAlumnos: (grado: { id: string; nombre: string }) => void;
 };
-
-const gradosMock = [
-  { nombre: 'Nursery', nivel: 'Inicial', alumnos: 18 },
-  { nombre: 'Prepa', nivel: 'Inicial', alumnos: 22 },
-  { nombre: 'Pre-kinder', nivel: 'Inicial', alumnos: 19 },
-  { nombre: 'Kinder', nivel: 'Inicial', alumnos: 20 },
-  { nombre: '1° Primaria', nivel: 'Primaria', alumnos: 24 },
-  { nombre: '2° Primaria', nivel: 'Primaria', alumnos: 26 },
-  { nombre: '3° Primaria', nivel: 'Primaria', alumnos: 21 },
-  { nombre: '4° Primaria', nivel: 'Primaria', alumnos: 23 },
-  { nombre: '5° Primaria', nivel: 'Primaria', alumnos: 25 },
-  { nombre: '6° Primaria', nivel: 'Primaria', alumnos: 20 },
-];
 
 export default function GradosScreen({
   maestro,
   darkMode,
   onToggleDarkMode,
   onVolver,
+  onIrAAlumnos,
 }: GradosScreenProps) {
-  const total = gradosMock.length;
-  const inicial = gradosMock.filter((grado) => grado.nivel === 'Inicial').length;
-  const primaria = gradosMock.filter((grado) => grado.nivel === 'Primaria').length;
+  const [grados, setGrados] = useState<Grado[]>([]);
+  const [alumnosByGrado, setAlumnosByGrado] = useState<Record<string, number>>({});
+  const [gradoActivoId, setGradoActivoId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadGrados = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        await seedGradosIfEmpty();
+        const gradosOrdenados = await getGradosOrdenados();
+
+        const alumnosCounts = await Promise.all(
+          gradosOrdenados.map(async (grado) => ({
+            gradoId: grado.id,
+            total: await getAlumnosCountByGrado(grado.id),
+          }))
+        );
+
+        const alumnosMap = alumnosCounts.reduce<Record<string, number>>((acc, item) => {
+          acc[item.gradoId] = item.total;
+          return acc;
+        }, {});
+
+        setGrados(gradosOrdenados);
+        setAlumnosByGrado(alumnosMap);
+        setGradoActivoId((prev) => prev ?? gradosOrdenados[0]?.id ?? null);
+      } catch (loadError) {
+        console.error('Error al cargar grados:', loadError);
+        setError('No se pudieron cargar los grados. Intenta nuevamente.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadGrados();
+  }, []);
+
+  const total = grados.length;
+  const inicial = useMemo(
+    () => grados.filter((grado) => grado.nivel === 'Inicial').length,
+    [grados]
+  );
+  const primaria = useMemo(
+    () => grados.filter((grado) => grado.nivel === 'Primaria').length,
+    [grados]
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">
@@ -69,16 +111,29 @@ export default function GradosScreen({
 
         <GradosStats total={total} inicial={inicial} primaria={primaria} />
 
-        <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {gradosMock.map((grado) => (
-            <GradoCard
-              key={grado.nombre}
-              nombre={grado.nombre}
-              nivel={grado.nivel}
-              alumnos={grado.alumnos}
-            />
-          ))}
-        </section>
+        {isLoading ? (
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-3xl p-8 text-center text-gray-600 dark:text-gray-400">
+            Cargando grados...
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-3xl p-8 text-center text-red-700 dark:text-red-300">
+            {error}
+          </div>
+        ) : (
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {grados.map((grado) => (
+              <GradoCard
+                key={grado.id}
+                nombre={grado.nombre}
+                nivel={grado.nivel}
+                alumnos={alumnosByGrado[grado.id] ?? 0}
+                isActive={gradoActivoId === grado.id}
+                onSelect={() => setGradoActivoId(grado.id)}
+                onGoToAlumnos={() => onIrAAlumnos({ id: grado.id, nombre: grado.nombre })}
+              />
+            ))}
+          </section>
+        )}
       </main>
     </div>
   );
